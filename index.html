@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SB Vanilla Chads</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -636,7 +638,23 @@
 // ═══════════════ DATA ═══════════════
 
 const PASS = 'admin';
-const VERSION = '3';
+
+const firebaseConfig = {
+    apiKey:            "AIzaSyA2pCDJ3efg18D3Q7f32dzyYNsB-pV-f80",
+    authDomain:        "sbrankings-44d9d.firebaseapp.com",
+    databaseURL:       "https://sbrankings-44d9d-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId:         "sbrankings-44d9d",
+    storageBucket:     "sbrankings-44d9d.firebasestorage.app",
+    messagingSenderId: "16236407433",
+    appId:             "1:16236407433:web:51dd7ea129a0b938087458"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+function toArr(v) {
+    if (!v) return [];
+    return Array.isArray(v) ? v.filter(Boolean) : Object.values(v);
+}
 
 const DEFAULT_NEWS = [
     { id:1, title:'Рейтинг запущен!', date:'14.05.2026', body:'Добро пожаловать на SB Vanilla Chads — официальный рейтинг чадов сервера. Следите за обновлениями!' },
@@ -679,29 +697,36 @@ let adminIn = false;
 let editId  = null;
 let newsEditId = null;
 
-// ═══════════════ INIT ═══════════════
+// ═══════════════ INIT + FIREBASE SYNC ═══════════════
 
-(function init() {
-    const savedVersion = localStorage.getItem('sbvc_version');
-    if (savedVersion !== VERSION) {
+document.getElementById('rankingsList').innerHTML =
+    '<div class="no-res" style="padding:60px 20px">⏳ Загрузка данных...</div>';
+
+db.ref('/').on('value', snap => {
+    const d = snap.val();
+    if (!d || (!d.players && !d.news)) {
         players = deepClone(DEFAULTS);
-        localStorage.setItem('sbvc_version', VERSION);
-    } else {
-        try { players = JSON.parse(localStorage.getItem('sbvc_players') || 'null') || deepClone(DEFAULTS); }
-        catch { players = deepClone(DEFAULTS); }
+        news    = deepClone(DEFAULT_NEWS);
+        db.ref('players').set(players);
+        db.ref('news').set(news);
+        render();
+        return;
     }
-    try { news = JSON.parse(localStorage.getItem('sbvc_news') || 'null') || deepClone(DEFAULT_NEWS); }
-    catch { news = deepClone(DEFAULT_NEWS); }
-    save();
+    players = toArr(d.players);
+    news    = toArr(d.news);
+    if (document.querySelector('.overlay.open')) return;
     render();
-})();
+    if (document.getElementById('newsView').style.display !== 'none') renderNews();
+    if (document.getElementById('profileView').style.display !== 'none' && currentProfileId) {
+        openDetail(currentProfileId);
+    }
+});
 
-function saveNews() { localStorage.setItem('sbvc_news', JSON.stringify(news)); }
-function nextNewsId() { return news.length ? Math.max(...news.map(n=>n.id)) + 1 : 1; }
-
-function save() { localStorage.setItem('sbvc_players', JSON.stringify(players)); }
+function save()     { db.ref('players').set(players); }
+function saveNews() { db.ref('news').set(news); }
 function deepClone(x) { return JSON.parse(JSON.stringify(x)); }
-function nextId() { return players.length ? Math.max(...players.map(p=>p.id)) + 1 : 1; }
+function nextId()     { return players.length ? Math.max(...players.map(p=>p.id)) + 1 : 1; }
+function nextNewsId() { return news.length    ? Math.max(...news.map(n=>n.id))    + 1 : 1; }
 
 // сортировка по очкам — единственный источник истины для ранга
 function getSorted() { return [...players].sort((a, b) => b.points - a.points); }
